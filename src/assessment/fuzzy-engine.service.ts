@@ -57,13 +57,18 @@ export class FuzzyEngineService {
   private trapezoidalMF(value: number, mf: TrapezoidalMF): number {
     const { a, b, c, d } = mf;
 
-    if (value <= a || value >= d) return 0;
+    // Strictly outside the support region → score 0
+    if (value < a || value > d) return 0;
+
+    // Within the plateau [b, c] → score 1
     if (value >= b && value <= c) return 1;
 
-    if (value > a && value < b) {
+    // Rising slope [a, b)
+    if (value >= a && value < b) {
       return b === a ? 1 : (value - a) / (b - a);
     }
 
+    // Falling slope (c, d]
     return d === c ? 0 : (d - value) / (d - c);
   }
 

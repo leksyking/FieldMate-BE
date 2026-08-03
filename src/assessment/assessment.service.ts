@@ -23,12 +23,12 @@ export class AssessmentService {
     @Optional()
     @InjectModel(Assessment.name)
     private readonly assessmentModel: Model<AssessmentDocument> | null,
-  ) {}
+  ) { }
 
   async runAssessment(
     request: AssessmentRequestDto,
   ): Promise<AssessmentResponseDto> {
-    const soilInput = this.extractSoilInput(request);
+    const { values: soilInput, displayValues } = this.extractSoilInput(request);
     const fuzzyResult = this.fuzzyEngine.evaluateCrop(
       soilInput,
       request.crop as CropName,
@@ -53,11 +53,12 @@ export class AssessmentService {
       fuzzyResult.scores,
     ).map(([paramKey, score]) => {
       const req = cropReq.parameters[paramKey];
-      const value = (soilInput as unknown as Record<string, number>)[paramKey];
+      // Use the pre-built human-readable display value (original sensor units / label)
+      const displayValue = displayValues[paramKey] ?? '';
       return {
         name: req.displayName,
         score: Math.round(score * 100) / 100,
-        displayValue: `${value} ${req.unit}`,
+        displayValue,
         isLimiting: score < 0.5,
       };
     });
@@ -104,9 +105,32 @@ export class AssessmentService {
     }
   }
 
-  private extractSoilInput(request: AssessmentRequestDto) {
+  private extractSoilInput(request: AssessmentRequestDto): {
+    values: ReturnType<typeof this.buildSoilValues>;
+    displayValues: Record<string, string>;
+  } {
     const s = request.sensor;
     const ft = request.field_tests;
+    const values = this.buildSoilValues(s, ft);
+    const displayValues: Record<string, string> = {
+      ph: `${s.soil_ph} pH`,
+      organicMatter: ft.organic_matter,
+      nitrogen: `${s.nitrogen} mg/kg`,
+      phosphorus: `${s.phosphorus} ppm`,
+      potassium: `${s.potassium} mg/kg`,
+      ec: `${s.electrical_conductivity} dS/m`,
+      drainage: ft.drainage_class,
+      soilDepth: `${ft.soil_depth_cm} cm`,
+      slope: ft.slope_class,
+      rainfall: `${values.rainfall} mm/yr`,
+    };
+    return { values, displayValues };
+  }
+
+  private buildSoilValues(
+    s: AssessmentRequestDto['sensor'],
+    ft: AssessmentRequestDto['field_tests'],
+  ) {
     return {
       ph: s.soil_ph,
       organicMatter: this.mapOrganicMatterLevel(ft.organic_matter),
@@ -121,22 +145,32 @@ export class AssessmentService {
     };
   }
 
+  /**
+   * Maps categorical organic matter level to a representative numeric % value.
+   *
+   * IMPORTANT: The returned value must sit firmly within the plateau region [b, c]
+   * of every crop's organicMatter trapezoidal MF, not on or beyond boundary d.
+   * – Low    → 1.5 % (above minimum a for most crops)
+   * – Moderate → 3.0 % (mid-range plateau)
+   * – High   → 5.0 % (comfortably inside plateau c; avoids hitting boundary d=6)
+   */
   private mapOrganicMatterLevel(level: string): number {
     const mapping: Record<string, number> = {
-      Low: 1.0,
+      Low: 1.5,
       Moderate: 3.0,
-      High: 6.0,
+      High: 5.0,
     };
-    return mapping[level] ?? 1.0;
+    return mapping[level] ?? 1.5;
   }
 
   private mapNitrogen(nitrogenMgKg: number): number {
-    // Convert mg/kg to % (mg/kg ÷ 10000 ≈ %)
+    // Sensor reads mg/kg; MF thresholds are in % (g per 100 g soil)
+    // 1 mg/kg = 0.0001 % → divide by 10 000
     return nitrogenMgKg / 10000;
   }
 
   private mapPotassium(potassiumMgKg: number): number {
-    // Convert mg/kg to cmolc/kg (mg/kg ÷ 391)
+    // Convert mg/kg to cmolc/kg (divide by 391 for K⁺, MW=39.1, valence=1)
     return potassiumMgKg / 391;
   }
 
@@ -153,17 +187,17 @@ export class AssessmentService {
 
   private mapSlopeClass(slopeClass: string): number {
     const mapping: Record<string, number> = {
-      '0–2% (Flat)': 0,
-      '2–5% (Gentle)': 2,
-      '5–8% (Moderate)': 8,
+      '0–2% (Flat)': 1,
+      '2–5% (Gentle)': 3,
+      '5–8% (Moderate)': 6,
       '>8% (Steep)': 15,
     };
-    return mapping[slopeClass] ?? 0;
+    return mapping[slopeClass] ?? 1;
   }
 
   private estimateRainfallFromMoisture(moisture: number): number {
-    // Estimate annual rainfall from soil moisture (mm/year)
-    // Higher moisture suggests higher rainfall region
+    // Estimate annual rainfall (mm/yr) from volumetric soil moisture (%)
+    // Higher moisture suggests higher rainfall region; capped at a realistic max
     return Math.min(4000, 600 + moisture * 25);
   }
 
