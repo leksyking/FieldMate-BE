@@ -8,7 +8,7 @@ import request from 'supertest';
 import { AssessmentController } from '../src/assessment/assessment.controller';
 import { AssessmentService } from '../src/assessment/assessment.service';
 import { FuzzyEngineService } from '../src/assessment/fuzzy-engine.service';
-import { ClaudeAiService, AiOutput } from '../src/assessment/claude-ai.service';
+import { GeminiAiService, AiOutput } from '../src/assessment/gemini-ai.service';
 import { Assessment } from '../src/assessment/schemas/assessment.schema';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 
@@ -70,7 +70,7 @@ describe('Assessment (e2e)', () => {
         AssessmentService,
         FuzzyEngineService,
         {
-          provide: ClaudeAiService,
+          provide: GeminiAiService,
           useValue: {
             generateRecommendations: jest.fn().mockResolvedValue(mockAiOutput),
           },

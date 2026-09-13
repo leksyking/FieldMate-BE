@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { randomUUID } from 'crypto';
 import { FuzzyEngineService } from './fuzzy-engine.service.js';
-import { ClaudeAiService } from './claude-ai.service.js';
+import { GeminiAiService } from './gemini-ai.service.js';
 import { AssessmentRequestDto } from './dto/assessment-request.dto.js';
 import {
   AssessmentResponseDto,
@@ -12,6 +12,7 @@ import {
 } from './dto/assessment-response.dto.js';
 import { CROP_REQUIREMENTS, type CropName } from './crop-requirements.data.js';
 import { Assessment, AssessmentDocument } from './schemas/assessment.schema.js';
+import { SoilValuesInterface } from './interface/soilValues.interface.js';
 
 @Injectable()
 export class AssessmentService {
@@ -19,11 +20,11 @@ export class AssessmentService {
 
   constructor(
     private readonly fuzzyEngine: FuzzyEngineService,
-    private readonly claudeAi: ClaudeAiService,
+    private readonly geminiAiService: GeminiAiService,
     @Optional()
     @InjectModel(Assessment.name)
     private readonly assessmentModel: Model<AssessmentDocument> | null,
-  ) { }
+  ) {}
 
   async runAssessment(
     request: AssessmentRequestDto,
@@ -33,10 +34,11 @@ export class AssessmentService {
       soilInput,
       request.crop as CropName,
     );
-    const aiOutput = await this.claudeAi.generateRecommendations(
+    const aiOutput = await this.geminiAiService.generateRecommendations(
       fuzzyResult,
       soilInput,
     );
+    this.logger.log('AiOutput: ' + JSON.stringify(aiOutput));
 
     const allCrops = this.fuzzyEngine.evaluateAllCrops(soilInput);
     const alternativeCrops: AlternativeCropDto[] = allCrops
@@ -106,7 +108,7 @@ export class AssessmentService {
   }
 
   private extractSoilInput(request: AssessmentRequestDto): {
-    values: ReturnType<typeof this.buildSoilValues>;
+    values: SoilValuesInterface;
     displayValues: Record<string, string>;
   } {
     const s = request.sensor;
@@ -130,7 +132,7 @@ export class AssessmentService {
   private buildSoilValues(
     s: AssessmentRequestDto['sensor'],
     ft: AssessmentRequestDto['field_tests'],
-  ) {
+  ): SoilValuesInterface {
     return {
       ph: s.soil_ph,
       organicMatter: this.mapOrganicMatterLevel(ft.organic_matter),

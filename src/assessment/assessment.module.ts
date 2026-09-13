@@ -3,7 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AssessmentController } from './assessment.controller.js';
 import { AssessmentService } from './assessment.service.js';
 import { FuzzyEngineService } from './fuzzy-engine.service.js';
-import { ClaudeAiService } from './claude-ai.service.js';
+import { GeminiAiService } from './gemini-ai.service.js';
 import { Assessment, AssessmentSchema } from './schemas/assessment.schema.js';
 
 @Module({
@@ -13,6 +13,6 @@ import { Assessment, AssessmentSchema } from './schemas/assessment.schema.js';
     ]),
   ],
   controllers: [AssessmentController],
-  providers: [AssessmentService, FuzzyEngineService, ClaudeAiService],
+  providers: [AssessmentService, FuzzyEngineService, GeminiAiService],
 })
 export class AssessmentModule {}
